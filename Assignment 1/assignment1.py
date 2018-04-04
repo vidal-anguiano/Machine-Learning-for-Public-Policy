@@ -5,6 +5,10 @@ import config
 import censusgeocode as cg
 import requests
 from census import Census
+from plotly import __version__
+from plotly.offline import download_plotlyjs, init_notebook_mode, plot, iplot
+import plotly.graph_objs as go
+init_notebook_mode(connected=True)
 
 CLIENT = Socrata("data.cityofchicago.org", config.key)
 CENSUS = Census(config.census_key)
@@ -52,3 +56,37 @@ def create_census_ddl(variables, metadata, state, county):
 	query += '''\nblock_group INT, \ncounty INT, \nstate INT, \ntract INT)'''
 
 	return query
+
+def barplot(df,x, y, title = '', xlabel = '', ylabel = '', subtitle = '', xsize = 14):
+    data = [go.Bar(
+            x=list(df[x]),
+            y=list(df[y]),
+            # text=list(df[y]),
+            textposition = 'outside',
+            opacity=1)]
+
+    layout = go.Layout(
+            title='<b>'+title+'</b><br>'+subtitle,
+            xaxis=dict(
+                title= xlabel,
+                tickfont=dict(
+                    size=xsize,
+                    color='rgb(107, 107, 107)'
+                )
+            ),
+            yaxis=dict(
+                title=ylabel,
+                titlefont=dict(
+                    size=16,
+                    color='rgb(107, 107, 107)'
+                ),
+                tickfont=dict(
+                    size=14,
+                    color='rgb(107, 107, 107)'
+                )
+            ),
+           )
+
+    fig = go.Figure(data=data, layout=layout)
+    iplot(fig, filename='basic-bar')
+
