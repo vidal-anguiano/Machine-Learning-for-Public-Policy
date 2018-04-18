@@ -1,3 +1,11 @@
+'''
+DB_Connection initializes a connection to a database and provides simple methods
+for querying data, loading data into a pandas DataFrame, automated
+assistance for creating tables from csv or a pandas DataFrame, and interacting
+in miscellaneous ways with the database.
+
+@author Vidal Anguiano Jr.
+'''
 import pandas as pd
 import csv, ast, psycopg2
 import os
@@ -5,16 +13,34 @@ import json
 from vatools.src.util import *
 
 
-
-class db_connection(object):
+class DB_Connection(object):
+    '''
+    DB_Connection is a way to initialize a connection to a database and easily
+    interact with it with simple functions to query data, create a table, and
+    run other SQL commands on the database.
+    '''
     def __init__(self, credentials_file):
+        '''
+        Initializes the DB_Connection by collecting access credentials from a
+        'credentials.json' file.
+        '''
         creds = json.load(open(credentials_file))
         self.hostname = creds["hostname"]
         self.username = creds["username"]
         self.password = creds["password"]
         self.database = creds["database"]
 
+
     def query(self, query, pandas = True):
+        '''
+        Establishes connection to database with provided credentials, takes a
+        query, and by default returns the result as a pandas DataFrame.
+        Inputs:
+            - query (str): a query to interact with the database
+            - pandas (bool): default, True. If true, the query result is
+            returned as a pandas dataframe. Othersise, it is returned as a
+            fetchall
+        '''
         conn = psycopg2.connect( host=self.hostname, user=self.username,
                           password=self.password, dbname=self.database )
         if pandas:
@@ -32,7 +58,15 @@ class db_connection(object):
         conn.close()
 
 
-    def create_table(self, csv_file, table_name, insert = False, sep = ','):
+    def create_table(self, csv_file, table_name, insert = True, sep = ','):
+        '''
+        Takes a csv file and automatically detects field types and produces an
+        initial Schema DDL, and finally loads the data from the csv file into
+        the database. The option is given to modify the DDL before the
+        data is loaded into the database.
+        Inputs:
+            - csv_file (str): path for the csv file to be loaded
+        '''
         try:
             conn = psycopg2.connect( host=self.hostname, user=self.username,
                               password=self.password, dbname=self.database )
@@ -41,31 +75,39 @@ class db_connection(object):
         cur = conn.cursor()
         try:
             statement = create_ddl(csv_file, table_name)
-            cur.execute(statement) # use your column names here
+            cur.execute(statement)
+            print("{} created successfully!".format(table_name))
 
             if insert:
-                print('Gets HERE')
                 with open(csv_file,'r') as f:
                     next(f)
-                    print('GETS HERE TOO')
                     cur.copy_from(f, table_name, sep, null = '')
                     conn.commit()
-
-            print(self.query("select * from " + table_name + " limit 10;"))
+                    print("Data successfully loaded into {}".format(table_name))
+                # print(self.query("select * from " + table_name + " limit 2;"))
             conn.close()
 
         except Exception as e:
             print(e)
             conn.close()
 
+
     def create_table_from_df(self, df, table_name):
+        '''
+        Function to load data from a pandas DataFrame into the data base.
+        Inputs:
+            - df (pandas DataFrame): data to input into database
+            - table_name (str): name to give the table where data will be loaded
+        '''
         df.to_csv('./temp.csv', index=False)
         self.create_table('temp.csv', table_name, insert=True)
         os.remove('./temp.csv')
 
 
-
 def dataType(val, current_type):
+    '''
+    Helper function to detect datatypes.
+    '''
     try:
         # Evaluates numbers to an appropriate type, and strings an error
         t = ast.literal_eval(val)
@@ -90,6 +132,9 @@ def dataType(val, current_type):
 
 
 def create_ddl(file_path, table_name):
+    '''
+    Helper function to create a DDL statement.
+    '''
     f = open(file_path, 'r')
     reader = csv.reader(f)
     longest, headers, type_list = [], [] ,[]
@@ -136,8 +181,10 @@ def create_ddl(file_path, table_name):
     return statement
 
 
-
 def make_edits(statement, edit):
+    '''
+    Helper function to process edits to the DDL statement.
+    '''
     statement = statement.split('\n')
     last = len(statement)
     if edit == 'Y':

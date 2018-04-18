@@ -30,7 +30,6 @@ def calc_impute_value(df_col, method):
     return func(df_col)
 
 
-
 def impute(df, method = 'mean', col_meth = None):
     '''
     By default, this function will impute the mean for all numeric
@@ -90,6 +89,7 @@ def discretize(df_col, bins = 5, labels = None, qcut = False):
     print(retbins)
     print(new_col.value_counts())
     return new_col
+
 
 def discretize_mult(df, col_bins, qcut = False):
     '''

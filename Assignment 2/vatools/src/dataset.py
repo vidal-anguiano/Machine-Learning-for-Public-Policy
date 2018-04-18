@@ -4,7 +4,7 @@ implementations.
 
 @author: Vidal Anguiano Jr.
 '''
-from vatools.src.db_conn import db_connection
+from vatools.src.db_conn import DB_Connection
 from vatools.src.util import *
 from sklearn.model_selection import train_test_split
 import pandas as pd
@@ -27,7 +27,7 @@ class DataSet(object):
         if '.csv' in source:
             data = pd.read_csv(source)
         elif parameters_file:
-            db = db_connection('credentials.json')
+            db = DB_Connection('credentials.json')
             if query:
                 data = db.query(query)
             else:
@@ -47,7 +47,7 @@ class DataSet(object):
         self.test_set = test_set.reset_index(drop=True)
 
 
-    def impute(self, df, method = 'mean', col_meth = None):
+    def impute(self, df, method = 'mean', col_meth = None, supress = False):
         '''
         By default, this function will impute the mean for all numeric
         columns and the mode for character and boolean columns. To impute
@@ -77,10 +77,13 @@ class DataSet(object):
                      'for your method on a string type column. Using mode instead.')
                 op = 'mode'
             df[col+'_imputed'] = df[col].fillna(calc_impute_value(df[col],op)).astype(int)
+        if supress:
+            return None
         return df.head()
 
 
-    def discretize(self, df, column, bins = 5, labels = None, qcut = False):
+    def discretize(self, df, column, bins = 5, labels = None, qcut = False,
+                   supress = False):
         '''
         Discretizes a column with a chosen number of bins and labels.
         If no labels are provided, integer labels from 1 to number of
@@ -111,11 +114,12 @@ class DataSet(object):
                                       retbins = True)
         print(retbins)
         print(df[column + '_discr'].value_counts())
-
+        if supress:
+            return None
         return df.head()
 
 
-    def dummies(self, df, columns, drop_first = False):
+    def dummies(self, df, columns, drop_first = False, supress = False):
         '''
         Create and append dummy variables to data set.
         Inputs:
@@ -131,6 +135,8 @@ class DataSet(object):
         '''
         df = pd.get_dummies(df, columns=columns, drop_first=drop_first)
 
+        if supress:
+            return None
         return df.head()
 
 
