@@ -3,13 +3,14 @@ DB_Connection initializes a connection to a database and provides simple methods
 for querying data, loading data into a pandas DataFrame, automated
 assistance for creating tables from csv or a pandas DataFrame, and interacting
 in miscellaneous ways with the database.
-
 @author Vidal Anguiano Jr.
 '''
 import pandas as pd
 import csv, ast, psycopg2
 import os
 import json
+from pandas import read_sql_query
+import traceback
 from vatools.src.util import *
 
 
@@ -58,7 +59,7 @@ class DB_Connection(object):
         conn.close()
 
 
-    def create_table(self, csv_file, table_name, insert = True, sep = ','):
+    def create_table(self, csv_file, table_name, insert = True, sep = '`'):
         '''
         Takes a csv file and automatically detects field types and produces an
         initial Schema DDL, and finally loads the data from the csv file into
@@ -74,8 +75,9 @@ class DB_Connection(object):
             print(e, "Couldn't connect to database.")
         cur = conn.cursor()
         try:
-            statement = create_ddl(csv_file, table_name)
+            statement = create_ddl(csv_file, table_name, sep)
             cur.execute(statement)
+            conn.commit()
             print("{} created successfully!".format(table_name))
 
             if insert:
@@ -89,6 +91,7 @@ class DB_Connection(object):
 
         except Exception as e:
             print(e)
+            traceback.print_exc()
             conn.close()
 
 
@@ -131,12 +134,12 @@ def dataType(val, current_type):
         return 'VARCHAR'
 
 
-def create_ddl(file_path, table_name):
+def create_ddl(file_path, table_name, sep = '`'):
     '''
     Helper function to create a DDL statement.
     '''
     f = open(file_path, 'r')
-    reader = csv.reader(f)
+    reader = csv.reader(f, delimiter = sep)
     longest, headers, type_list = [], [] ,[]
     for row in reader:
         if len(headers) == 0:
