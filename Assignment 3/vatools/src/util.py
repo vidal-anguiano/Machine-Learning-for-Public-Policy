@@ -4,14 +4,15 @@ import pandas_profiling
 from pandas import read_sql_query
 import numpy as np
 import seaborn as sns
+from datetime import datetime
 from sklearn.model_selection import train_test_split
 
-def tt_split(X, Y, test_split = .5):
+def tt_split(X, Y, test_size = .5):
     '''
     Takes as inputs the features and the outcome var and creates train test
     split with a default test_split of .5.
     '''
-    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.4)
+    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size)
 
     return X_train, X_test, y_train, y_test
 
@@ -28,13 +29,17 @@ def calc_impute_value(df_col, method):
         column type and the method performed, the value returned is
         the result of a mean, median, or mode method on a column
     '''
-    assert method in ['mean','median','zeros', 'mode'], ('Use mean, median,\
-                                                        mode or zeros.')
+    if type(method) == list:
+        method, value = 'custom', method[0]
+    assert method in ['mean', 'median', 'zeros', 'mode', 'missing', 'custom'], ('Use mean, median,\
+                                                        # mode or zeros.')
 
     methods = {'mean': lambda x: x.mean(),
                   'median': lambda x: x.median(),
                   'zeros': lambda x: 0,
-                  'mode': lambda x: x.mode()}
+                  'mode': lambda x: x.mode(),
+                  'missing': lambda x: 'missing',
+                  'custom': lambda x: value}
     func = methods[method]
 
     return func(df_col)
@@ -57,7 +62,6 @@ def impute(df, method = 'mean', col_meth = None):
     Outputs:
         - df (pandas DataFrame): new pandas DataFrame with imputed values
     '''
-    df = df.copy()
     if not col_meth:
         col_meth = dict(zip(df.columns,[method]*len(df.columns)))
 
@@ -66,42 +70,42 @@ def impute(df, method = 'mean', col_meth = None):
             print('WARNING: You selected',op,
                  'for your method on a string type column. Using mode instead.')
             op = 'mode'
-        df[col] = df[col].fillna(calc_impute_value(df[col],op))
+        df[col] = df[col].fillna(calc_impute_value(df[col], op))
 
     return df
 
 
-# def discretize(df_col, bins = 5, labels = None, qcut = False):
-#     '''
-#     Discretizes a column with a chosen number of bins and labels.
-#     If no labels are provided, integer labels from 1 to number of
-#     bins are returned. By default, equal interval bins are used.
-#     To get bins of equal size, set qcut to True.
-#     Inputs:
-#         - df_col (pandas Series): data column to be discretized
-#         - bins (int): number of bins to discretize data
-#         - labels (list): labels to use for the data. By default,
-#         integers ranging from 1 to the number of bins are used
-#         - qcut (boolean): Set to true to return equal sized bins.
-#         By default, equal size intervals will be used.
-#     Outputs:
-#         - prints bin ranges
-#         - new_col (pandas Series): new discretized column
-#     '''
-#     if not labels:
-#         labels = list(range(1,bins+1))
-#     if qcut:
-#         new_col, retbins = pd.qcut(df_col, bins,labels = labels,
-#                                    retbins = True)
-#     else:
-#         new_col, retbins = pd.cut(df_col, bins, labels = labels,
-#                                   retbins = True)
-#     print(retbins)
-#     print(new_col.value_counts())
-#     return new_col
+def discretize(df_col, bins = 5, labels = None, qcut = False):
+    '''
+    Discretizes a column with a chosen number of bins and labels.
+    If no labels are provided, integer labels from 1 to number of
+    bins are returned. By default, equal interval bins are used.
+    To get bins of equal size, set qcut to True.
+    Inputs:
+        - df_col (pandas Series): data column to be discretized
+        - bins (int): number of bins to discretize data
+        - labels (list): labels to use for the data. By default,
+        integers ranging from 1 to the number of bins are used
+        - qcut (boolean): Set to true to return equal sized bins.
+        By default, equal size intervals will be used.
+    Outputs:
+        - prints bin ranges
+        - new_col (pandas Series): new discretized column
+    '''
+    if not labels:
+        labels = list(range(1,bins+1))
+    if qcut:
+        new_col, retbins = pd.qcut(df_col, bins,labels = labels,
+                                   retbins = True)
+    else:
+        new_col, retbins = pd.cut(df_col, bins, labels = labels,
+                                  retbins = True)
+    print(retbins)
+    print(new_col.value_counts())
+    return new_col
 
 
-def discretize(df, col_bins, qcut = False):
+def discretize_many(df, col_bins):
     '''
     Discretize multiple columns at once by providing a
     dictionary of column names and bins as keys and values,
@@ -116,14 +120,19 @@ def discretize(df, col_bins, qcut = False):
         - df (pandas DataFrame): new pandas DataFrame with discretized
         columns added to the end of the dataframe
     '''
-    df = df.copy()
-    for col, bins in col_bins.items():
+    for col, vals in col_bins.items():
+        print(col, vals)
+        if type(vals) == list:
+            bins, qcut = vals[0], vals[1]
+        else:
+            bins, qcut = vals, False
         df[col+'_descr'] = discretize(df[col], bins=bins, qcut=qcut)
+        df.drop(columns=col)
 
     return df
 
 
-def dummies(df, columns, drop_first = False):
+def dummies(df, columns, drop_first = False, dummy_na = False):
     '''
     Create and append dummy variables to data set.
     Inputs:
@@ -137,6 +146,36 @@ def dummies(df, columns, drop_first = False):
         - df.head() preview of the first 5 records to show creation of new
         columns.
     '''
-    df = pd.get_dummies(df, columns=columns, drop_first=drop_first)
+    for col in columns:
+        df[col] = df[col].apply(lambda x: x.lower().replace(' ','_').replace('&','and').replace('-','_'))
+    df = pd.get_dummies(df, columns=columns, drop_first = drop_first, dummy_na = dummy_na)
 
     return df
+
+
+def dullify(df, col_val):
+    ''' Decrease cardinality of feature and create dummies. '''
+    for col, vals in col_val.items():
+        df[col] = df[col].apply(lambda x: x if x in vals else 'other')
+        df = dummies(df, columns = [col])
+    return df
+
+
+def fix_bool(df, columns):
+    ''' Will fix booleans if represented as t/f, T/F or string True/False. '''
+    for col in columns:
+        if 't' in df[col].unique():
+            df[col] = df[col].apply(lambda x: 1 if x == 't' else 0 if x == 'f' else -1)
+        elif 'T' in df[col].unique():
+            df[col] = df[col].apply(lambda x: 1 if x == 'T' else 0 if x == 'F' else -1)
+        elif 'True' in df[col].unique():
+            df[col] = df[col].apply(lambda x: 1 if x == 'True' else 0 if x == 'False' else -1)
+
+def current_time_str():
+    current_time_list = []
+    current_time_list.append(str(datetime.now().month))
+    current_time_list.append(str(datetime.now().day))
+    current_time_list.append(str(datetime.now().hour))
+    current_time_list.append(str(datetime.now().minute))
+    current_time = '_'.join(current_time_list)
+    return current_time

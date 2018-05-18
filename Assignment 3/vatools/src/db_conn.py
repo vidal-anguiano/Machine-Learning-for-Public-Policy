@@ -20,7 +20,7 @@ class DB_Connection(object):
     interact with it with simple functions to query data, create a table, and
     run other SQL commands on the database.
     '''
-    def __init__(self, credentials_file):
+    def __init__(self, credentials_file = 'credentials.json'):
         '''
         Initializes the DB_Connection by collecting access credentials from a
         'credentials.json' file.
@@ -86,6 +86,8 @@ class DB_Connection(object):
         assert conn, "Initialize a connection first!"
         cur = conn.cursor()
         try:
+            cur.execute('drop table if exists {};'.format(table_name))
+            conn.commit()
             statement = create_ddl(csv_file, table_name)
             cur.execute(statement)
             print("{} created successfully!".format(table_name))
@@ -102,14 +104,14 @@ class DB_Connection(object):
             conn.close()
 
 
-    def create_table_from_df(self, df, table_name):
+    def create_table_from_df(self, df, table_name, sep = ','):
         '''
         Function to load data from a pandas DataFrame into the data base.
         Inputs:
             - df (pandas DataFrame): data to input into database
             - table_name (str): name to give the table where data will be loaded
         '''
-        df.to_csv('./temp.csv', index=False)
+        df.to_csv('./temp.csv', index=False, sep=sep)
         self.create_table('temp.csv', table_name, insert=True)
         os.remove('./temp.csv')
 
