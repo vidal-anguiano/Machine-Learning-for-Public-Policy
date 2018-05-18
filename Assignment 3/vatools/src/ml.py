@@ -26,32 +26,60 @@ all_methods = {'logit': LogisticRegression(),
                'gbc': GradientBoostingClassifier(),
                'bag': BaggingClassifier()}
 
-''' SINGLE METHOD RUNS '''
 
-def decision_trees(X_train, y_train, X_test, y_test, max_depths = None, pred_thresh = .5):
+    ''' *** PIPELINE *** '''
+
+def mlpipeline(data, features, outcome, test_size = .5, methods = None,
+                        param_file = '../mlparams.json', temporal = None,
+                        date_col = None):
     '''
-    INSERT DOCSTRING.
+    Creates train test splits (temporal optional) and trains machine learning
+    learning models using methods and parameters of choice.
     '''
-    max_depths = [2, 3, 4, 5, 6, 7]
-    for md in max_depths:
-        d_tree = DecisionTreeClassifier(max_depth=md)
-        d_tree.fit(X_train, y_train)
-        pred_proba = d_tree.predict_proba(X_test)[:,1]
+    if temporal:
+        for dates in date_intervals(**temporal):
+            (X_train, y_train,
+            X_test, y_test) = temporal_split(data, date_col, features, outcome, **dates)
+            classify(X_train, y_train, X_test, y_test, methods=methods, param_file=param_file)
+        return True
+    else:
+        X = data[features]
+        Y = data[outcome]
+        train_test = [X_train, y_train, X_text, y_test] = train_test_split(X, Y, test_size)
+        classify(*train_test, methods, param_file)
+        return True
 
-        # evaluate accuracy
-        train_acc = accuracy(train_pred, y_train)
-        precision, recall, roc_auc, accuracy = evaluate(y_test, test_pred, top)
 
-        print("Depth: {} | Train Acc: {:.2f} | ".format(d, train_acc) +
-              "Test Acc: {:.2f} | Prec: {:.2f} | ".format(acc, pre) +
-              "Recall: {:.2f} | ROC AUC {:.2f}".format(recall, roc_auc))
+def classify(X_train, y_train, X_test, y_test, param_file = '../mlparams.json' ,methods = None):
+    ''' Build multiple models using serveral methods and parameters. '''
+    if not methods:
+        methods = (all_methods.keys())
+
+    params = json.load(open(param_file))
+    m_id = 0
+    models = []
+    for method in methods:
+        for param_set in ParameterGrid(params[method]):
+            model = all_methods[method].set_params(**param_set).fit(X_train, y_train)
+            pred_proba = model.predict_proba(X_test)[:,1]
+            for pred_thresh in range(5,10):
+                metrics = evaluate(y_test, pred_proba, pred_thresh*.1)
+                print('Method: {} | Parameters: {} | Pred_Threshold: {:.1f}'.format(
+                     method, param_set, pred_thresh*.1))
+                models.append([method, param_set, pred_thresh*.1,
+                               metrics['precision'], metrics['precision'][1],
+                               metrics['recall'],
+                               metrics['roc_auc'], metrics['accuracy']])
+    results = create_results_df(models, '../results/results_run_on_{}.csv'.format(util.current_time_str()))
+
+    return results
 
 
 ''' *** EVALUATION *** '''
 
 def evaluate(y_test, pred_proba, pred_thresh):
     '''
-    INSERT DOCSTRING.
+    Returns precision, recall, roc_auc, and accuracy evaluation metrics.
     '''
     pred = (pred_proba > pred_thresh).astype(int)
     df = pd.DataFrame({'y_test': y_test,
@@ -76,50 +104,26 @@ def evaluate(y_test, pred_proba, pred_thresh):
 
     return metrics
 
-    ''' *** PIPELINE *** '''
 
-def mlpipeline(data, features, outcome, test_size = .5, methods = None,
-                        param_file = '../mlparams.json', temporal = None, date_col = None):
+''' SINGLE METHOD RUNS '''
+
+def decision_trees(X_train, y_train, X_test, y_test, max_depths = None, pred_thresh = .5):
     '''
-    Creates train test splits (temporal optional) and trains machine learning
-    learning models using methods and parameters of choice.
+    INSERT DOCSTRING.
     '''
-    if temporal:
-        for dates in date_intervals(**temporal):
-            X_train, y_train, X_test, y_test = temporal_split(data, date_col, features, outcome, **dates)
-            print("Classifying!")
-            classify(X_train, y_train, X_test, y_test, methods=methods, param_file=param_file)
-        return True
-    else:
-        X = data[features]
-        Y = data[outcome]
-        train_test = [X_train, y_train, X_text, y_test] = train_test_split(X, Y, test_size)
-        classify(*train_test, methods, param_file)
-        return True
+    max_depths = [2, 3, 4, 5, 6, 7]
+    for md in max_depths:
+        d_tree = DecisionTreeClassifier(max_depth=md)
+        d_tree.fit(X_train, y_train)
+        pred_proba = d_tree.predict_proba(X_test)[:,1]
 
-def classify(X_train, y_train, X_test, y_test, param_file = '../mlparams.json' ,methods = None):
-    ''' Build multiple models using serveral methods and parameters. '''
-    if not methods:
-        methods = (all_methods.keys())
+        # evaluate accuracy
+        train_acc = accuracy(train_pred, y_train)
+        precision, recall, roc_auc, accuracy = evaluate(y_test, test_pred, top)
 
-    params = json.load(open(param_file))
-    m_id = 0
-    models = []
-    for method in methods:
-        for param_set in ParameterGrid(params[method]):
-            model = all_methods[method].set_params(**param_set).fit(X_train, y_train)
-            pred_proba = model.predict_proba(X_test)[:,1]
-            for pred_thresh in range(5,10):
-                metrics = evaluate(y_test, pred_proba, pred_thresh*.1)
-                print('Method: {} | Parameters: {} | Pred_Threshold: {:.1f}'.format(
-                     method, param_set, pred_thresh*.1))
-                models.append([method, param_set, pred_thresh*.1,
-                               metrics['precision'], metrics['precision'][1],
-                               metrics['recall'],
-                               metrics['roc_auc'], metrics['accuracy']])
-    results = create_results_df(models, 'results_run_on_{}.csv'.format(util.current_time_str()))
-
-    return results
+        print("Depth: {} | Train Acc: {:.2f} | ".format(d, train_acc) +
+              "Test Acc: {:.2f} | Prec: {:.2f} | ".format(acc, pre) +
+              "Recall: {:.2f} | ROC AUC {:.2f}".format(recall, roc_auc))
 
 
 def date_intervals(start_date, train_months, test_months, gap_months = 0, periods = 1, increment_months = 12):
