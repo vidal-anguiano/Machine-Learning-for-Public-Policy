@@ -82,6 +82,51 @@ def evaluate(y_test, pred_proba, pred_thresh):
     return metrics
 
     ''' *** PIPELINE *** '''
+
+def mlpipeline(data, features, outcome, test_size = .5, methods = None,
+                        param_file = 'mlparams.json', temporal = None):
+    '''
+    Creates train test splits (temporal optional) and trains machine learning
+    learning models using methods and parameters of choice.
+    '''
+    if temporal:
+        for dates in date_intervals(**temporal):
+            train_test = [X_train, y_train, X_test, y_test] = temporal_split(**dates)
+            classify(X_train, y_train, X_test, y_test, methods, param_file)
+        return True
+    else:
+        X = data[features]
+        Y = data[outcome]
+        train_test = [X_train, y_train, X_text, y_test] = train_test_split(X, Y, test_size)
+        classify(*train_test, methods, param_file)
+        return True
+
+def classify(X_train, y_train, X_test, y_test, param_file = 'mlparams.json',
+                                    results_fn = 'results.csv' ,methods = None):
+    ''' Build multiple models using serveral methods and parameters. '''
+    if not methods:
+        methods = (all_methods.keys())
+
+    params = json.load(open(param_file))
+    m_id = 0
+    models = []
+    for method in methods:
+        for param_set in ParameterGrid(params[method]):
+            model = all_methods[method].set_params(**param_set).fit(X_train, y_train)
+            pred_proba = model.predict_proba(X_test)[:,1]
+            for pred_thresh in range(5,10):
+                metrics = evaluate(y_test, pred_proba, pred_thresh*.1)
+                print('Model: {} | Parameters: {} | Pred_Threshold: {:.1f}'.format(
+                     method, param_set, pred_thresh*.1))
+                models.append([method, param_set, pred_thresh*.1,
+                               metrics['precision'], metrics['precision'][1],
+                               metrics['recall'],
+                               metrics['roc_auc'], metrics['accuracy']])
+    results = create_results_df(models, results_fn)
+
+    return results
+
+
 def date_intervals(start_date, train_months, test_months, gap_months = 0, periods = 1, increment_months = 12):
     ''' Helper function for creating date intervals to split data on. '''
     start_date = datetime.strptime(start_date,'%m/%d/%Y').date()
@@ -132,33 +177,6 @@ def ymddelta(dt, d_years=0, d_months=0, first=False):
 def get_last_day(dt):
     return get_first_day(dt, 0, 1) + timedelta(-1)
 
-
-def classify(X_train, y_train, X_test, y_test, param_file = 'mlparams.json',
-                                    results_fn = 'results.csv' ,methods = None):
-    ''' Build multiple models using serveral methods and parameters. '''
-    if not methods:
-        methods = (all_methods.keys())
-
-    params = json.load(open(param_file))
-    m_id = 0
-    models = []
-    for method in methods:
-        for param_set in ParameterGrid(params[method]):
-            model = all_methods[method].set_params(**param_set).fit(X_train, y_train)
-            pred_proba = model.predict_proba(X_test)[:,1]
-            for pred_thresh in range(5,10):
-                metrics = evaluate(y_test, pred_proba, pred_thresh*.1)
-                print('Model: {} | Parameters: {} | Pred_Threshold: {:.1f}'.format(
-                     method, param_set, pred_thresh*.1))
-                models.append([method, param_set, pred_thresh*.1,
-                               metrics['precision'], metrics['precision'][1],
-                               metrics['recall'],
-                               metrics['roc_auc'], metrics['accuracy']])
-    results = create_results_df(models, results_fn)
-
-    return results
-
-def mlpipeline(data, features, outcome, temporal = None):
 
 def create_results_df(models, filename):
     ''' Helper function for exporting results dataframe. '''
