@@ -3,6 +3,7 @@ from pandas import get_dummies
 import pandas_profiling
 from pandas import read_sql_query
 import numpy as np
+import seaborn as sns
 from sklearn.model_selection import train_test_split
 
 def tt_split(X, Y, test_split = .5):
