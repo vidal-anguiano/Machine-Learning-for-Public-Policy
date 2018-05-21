@@ -1,5 +1,6 @@
 
 import pandas as pd
+import numpy as np
 import json
 from vatools.utils import data_processing as dp
 from math import ceil
@@ -14,6 +15,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble import BaggingClassifier
+from sklearn.naive_bayes import MultinomialNB, BernoulliNB
+from sklearn.cross_validation import KFold
 
 from sklearn.model_selection import ParameterGrid
 from sklearn.metrics import confusion_matrix
@@ -25,14 +28,16 @@ all_methods = {'logit': LogisticRegression(),
                'svm': SVC(probability=True),
                'rf': RandomForestClassifier(),
                'gbc': GradientBoostingClassifier(),
-               'bag': BaggingClassifier()}
+               'bag': BaggingClassifier(),
+               'bnb': BernoulliNB(),
+               'mnb': MultinomialNB()}
 
 
 ''' *** PIPELINE *** '''
 
 def mlpipeline(data, features, outcome, test_size = .5, methods = None,
                         param_file = '../mlparams.json', temporal = None,
-                        date_col = None):
+                        date_col = None, n_folds):
     '''
     Creates train test splits (temporal optional) and trains machine learning
     learning models using methods and parameters of choice.
@@ -44,12 +49,15 @@ def mlpipeline(data, features, outcome, test_size = .5, methods = None,
             X_test, y_test) = temporal_split(data, date_col, features, outcome, **dates)
             classify(X_train, y_train, X_test, y_test, methods=methods, param_file=param_file)
     else:
-        X = data[features]
-        Y = data[outcome]
-        train_test = train_test_split(X, Y, test_size)
-        classify(*train_test, methods, param_file)
-
-
+        # kf = KFold(n_splits=n_folds, shuffle=True)
+        # X = data[features]
+        # y = data[outcome]
+        #
+        # for train_index, test_index in kf.split(X[features]):
+        #     train_test = (X[train_index], y[train_index],
+        #                   X[test_index],  y[test_index])
+        #     classify(*train_test, methods, param_file)
+        return "Currently being developed, come back soon."
 
 def classify(X_train, y_train, X_test, y_test, param_file = '../mlparams.json'
                                                              ,methods = None):
@@ -73,10 +81,42 @@ def classify(X_train, y_train, X_test, y_test, param_file = '../mlparams.json'
                                metrics['precision'], metrics['precision'][1],
                                metrics['recall'], metrics['recall'][1],
                                metrics['roc_auc'], metrics['accuracy']])
+
     results = create_results_df(models, '../results/results_run_on_{}.csv'.format(
                                                             dp.current_time_str()))
 
     return results
+
+# def classify_kfold(X, Y, param_file = '../mlparams.json',methods = None):
+#     if not methods:
+#         methods = list(all_methods)
+#     kf = KFold(n_splits=n_folds, shuffle=True)
+#     params = json.load(open(param_file))
+#     models = []
+#     for method in methods:
+#         m_id = 0
+#         for param_set in ParameterGrid(params[method]):
+#             m_id += 1
+#             columns=['threshold','percision','recall','auc_roc','accuracy']
+#             metrics = pd.DataFrame(columns=['threshold','percision','recall','auc_roc','accuracy'])
+#             for train_index, test_index in kf.split(X):
+#                 train_test = (X[train_index], y[train_index],
+#                               X[test_index],  y[test_index])
+#                 model = all_methods[method].set_params(**param_set).fit(X_train, y_train)
+#                 pred_proba = model.predict_proba(X_test)[:,1]
+#                 for pred_thresh in range(5,10):
+#                     metrics = evaluate(y_test, pred_proba, pred_thresh*.1)
+#                     print('Method: {} | Parameters: {} | Pred_Threshold: {:.1f}'.format(
+#                                                  method, param_set, pred_thresh*.1))
+#                 models.append([m_id, method, param_set, pred_thresh*.1,
+#                                metrics['precision'], metrics['precision'][1],
+#                                metrics['recall'], metrics['recall'][1],
+#                                metrics['roc_auc'], metrics['accuracy']])
+#
+#     results = create_results_df(models, '../results/results_run_on_{}.csv'.format(
+#                                                             dp.current_time_str()))
+#
+#     return results
 
 
 ''' *** EVALUATION *** '''
