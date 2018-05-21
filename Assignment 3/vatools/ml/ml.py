@@ -4,6 +4,7 @@ import json
 from vatools.utils import data_processing as dp
 from math import ceil
 from datetime import datetime, date, timedelta
+import csv
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
@@ -27,7 +28,7 @@ all_methods = {'logit': LogisticRegression(),
                'bag': BaggingClassifier()}
 
 
-    ''' *** PIPELINE *** '''
+''' *** PIPELINE *** '''
 
 def mlpipeline(data, features, outcome, test_size = .5, methods = None,
                         param_file = '../mlparams.json', temporal = None,
@@ -38,39 +39,42 @@ def mlpipeline(data, features, outcome, test_size = .5, methods = None,
     '''
     if temporal:
         for dates in date_intervals(**temporal):
+            print(dates)
             (X_train, y_train,
             X_test, y_test) = temporal_split(data, date_col, features, outcome, **dates)
             classify(X_train, y_train, X_test, y_test, methods=methods, param_file=param_file)
-        return True
     else:
         X = data[features]
         Y = data[outcome]
-        train_test = [X_train, y_train, X_text, y_test] = train_test_split(X, Y, test_size)
+        train_test = train_test_split(X, Y, test_size)
         classify(*train_test, methods, param_file)
-        return True
 
 
-def classify(X_train, y_train, X_test, y_test, param_file = '../mlparams.json' ,methods = None):
+
+def classify(X_train, y_train, X_test, y_test, param_file = '../mlparams.json'
+                                                             ,methods = None):
     ''' Build multiple models using serveral methods and parameters. '''
     if not methods:
-        methods = (all_methods.keys())
+        methods = list(all_methods)
 
     params = json.load(open(param_file))
-    m_id = 0
     models = []
     for method in methods:
+        m_id = 0
         for param_set in ParameterGrid(params[method]):
+            m_id += 1
             model = all_methods[method].set_params(**param_set).fit(X_train, y_train)
             pred_proba = model.predict_proba(X_test)[:,1]
             for pred_thresh in range(5,10):
                 metrics = evaluate(y_test, pred_proba, pred_thresh*.1)
                 print('Method: {} | Parameters: {} | Pred_Threshold: {:.1f}'.format(
-                     method, param_set, pred_thresh*.1))
-                models.append([method, param_set, pred_thresh*.1,
+                                                 method, param_set, pred_thresh*.1))
+                models.append([m_id, method, param_set, pred_thresh*.1,
                                metrics['precision'], metrics['precision'][1],
-                               metrics['recall'],
+                               metrics['recall'], metrics['recall'][1],
                                metrics['roc_auc'], metrics['accuracy']])
-    results = create_results_df(models, '../results/results_run_on_{}.csv'.format(dp.current_time_str()))
+    results = create_results_df(models, '../results/results_run_on_{}.csv'.format(
+                                                            dp.current_time_str()))
 
     return results
 
@@ -87,18 +91,12 @@ def evaluate(y_test, pred_proba, pred_thresh):
                        'pred_proba': pred_proba}).sort_values(by = 'pred_proba',
                                                               ascending = False)
 
-    precision = {}
-    for precision_at in [.01, .02, .05, .1, .2, .3, .5, 1]:
-        cutoff = ceil(len(df)*precision_at)
-        sdf = df.iloc[:cutoff]
-        y_test, pred = sdf['y_test'], sdf['pred']
-        precision[precision_at] = round(precision_score(y_test, pred),2)
-
+    precision, recall = precision_recall_at_intervention_levels(df)
     y_test, pred, pred_proba  = df['y_test'], df['pred'], df['pred_proba']
 
     metrics = {}
     metrics['precision'] = precision
-    metrics['recall'] = recall_score(y_test, pred)
+    metrics['recall'] = recall
     metrics['roc_auc'] = roc_auc_score(y_test, pred_proba)
     metrics['accuracy'] = accuracy_score(y_test, pred)
 
@@ -107,7 +105,22 @@ def evaluate(y_test, pred_proba, pred_thresh):
 
 ''' HELPER FUNCTIONS '''
 
-def date_intervals(start_date, train_months, test_months, gap_months = 0, periods = 1, increment_months = 12):
+def precision_recall_at_intervention_levels(df):
+    ''' Helper function for calculating precision at different levels. '''
+    precision, recall = {}, {}
+    for pr_at in [.01, .02, .05, .1, .2, .3, .5, 1]:
+        cutoff = ceil(len(df)*pr_at)
+        sdf = df.iloc[:cutoff]
+        y_test, pred = sdf['y_test'], sdf['pred']
+        TP = len(sdf[(sdf['pred'] == 1) & (sdf['y_test'] == 1)])
+        P = len(df[df['y_test'] == 1])
+        recall[pr_at] = round(TP/(P if P != 0 else 1), 2)
+        precision[pr_at] = round(precision_score(y_test, pred), 2)
+
+    return precision, recall
+
+def date_intervals(start_date, train_months, test_months, gap_months = 0,
+                                     periods = 1, increment_months = 12):
     ''' Helper function for creating date intervals to split data on. '''
     start_date = datetime.strptime(start_date,'%m/%d/%Y').date()
     dates = []
@@ -123,7 +136,8 @@ def date_intervals(start_date, train_months, test_months, gap_months = 0, period
     return dates
 
 
-def temporal_split(data, date_col, features, outcome, train_start, train_end, test_start, test_end):
+def temporal_split(data, date_col, features, outcome, train_start, train_end,
+                                                      test_start, test_end):
     ''' Create temporal train test splits. '''
     data[date_col] = data[date_col].astype('datetime64[ns]')
     train = data[(data[date_col] >= train_start) & (data[date_col] <= train_end)]
@@ -159,8 +173,8 @@ def get_last_day(dt):
 
 def create_results_df(models, filename):
     ''' Helper function for exporting results dataframe. '''
-    df = pd.DataFrame(models, columns=['method','parameters','pred_threshold',
-                                       'all_precicion','precision','recall',
-                                       'roc_auc','accuracy'])
+    df = pd.DataFrame(models, columns=['m_id','method','parameters','pred_threshold',
+                                       'all_precicion','precision','all_recall',
+                                       'recall','roc_auc','accuracy'])
     df.to_csv(filename)
     return df

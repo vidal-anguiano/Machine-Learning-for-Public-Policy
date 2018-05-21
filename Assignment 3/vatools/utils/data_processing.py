@@ -1,7 +1,6 @@
 import pandas as pd
 from pandas import get_dummies
 import pandas_profiling
-from pandas import read_sql_query
 import numpy as np
 import seaborn as sns
 from datetime import datetime
@@ -171,3 +170,45 @@ def current_time_str():
     current_time_list.append(str(datetime.now().minute))
     current_time = '_'.join(current_time_list)
     return current_time
+
+
+def get_date_parts(df, col_date_parts):
+    for col, parts in col_date_parts.items():
+        if 'day_of_week' in parts:
+            df[col + '_day_of_week'] = df[col].apply(lambda x: day_of_week(x))
+        if 'day_of_week_readable' in parts:
+            df[col + '_day_of_week_readable'] = df[col].apply(lambda x: day_of_week(x, True))
+        if 'month' in parts:
+            df[col + '_month'] = df[col].apply(lambda x: month(x))
+        if 'month_readable' in parts:
+            df[col + '_month_readable'] = df[col].apply(lambda x: month(x, True))
+        if 'year' in parts:
+            df[col + '_year'] = df[col].apply(lambda x: x.year)
+        if 'is_weekend' in parts:
+            df[col + '_is_weekend'] = df[col].apply(lambda x: 1 if day_of_week(x) in [5, 6] else 0)
+        if 'is_weekday' in parts:
+            df[col + '_is_weekday'] = df[col].apply(lambda x: 0 if day_of_week(x) in [5, 6] else 1)
+
+    return df
+
+def day_of_week(date, word=False):
+    day = date.weekday()
+    if word:
+        days_of_week = {0: 'Monday',
+                    1: 'Tuesday',
+                    2: 'Wednesday',
+                    3: 'Thursday',
+                    4: 'Friday',
+                    5: 'Saturday',
+                    6: 'Sunday'}
+        return days_of_week[day]
+    return day
+
+def month(date, word=False):
+    month = date.month
+    if word:
+        months = {1: 'January', 2: 'February', 3: 'March', 4: 'April',
+               5: 'May', 6: 'June', 7: 'July', 8: 'August',
+               9: 'September', 10: 'October', 11: 'November', 12: 'December'}
+        return months[month]
+    return month
