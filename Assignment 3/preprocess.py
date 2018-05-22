@@ -1,43 +1,32 @@
-from vatools.src import util
-from vatools.src.db_conn import DB_Connection
-from vatools.src import ml
-
+from vatools.utils import data_processing as dp
+from vatools.db_conn.db_conn import DBConnection
+from vatools.ml import ml
 
 
 if __name__ == '__main__':
-    db = DB_Connection('../credentials.json')
+    db = DBConnection('../credentials.json')
     db.connect()
     outcomes = db.query('select * from outcomes')
     projects = db.query('select * from projects')
 
-    util.impute(outcomes,
-                col_meth = {'at_least_1_teacher_referred_donor': ['f'],
-                            'at_least_1_green_donation': ['f'],
-                            'three_or_more_non_teacher_referred_donors': ['f'],
-                            'one_non_teacher_referred_donor_giving_100_plus': ['f'],
-                            'donation_from_thoughtful_donor': ['f'],
-                            'great_messages_proportion': 'zeros',
-                            'non_teacher_referred_count': 'zeros',
-                            'teacher_referred_count': 'zeros'})
-    print('Missing values in outcomes data imputed with "f".')
+    ''' *** PREPROCESSING, CLEANING, AND FEATURE CREATION *** '''
 
-    util.impute(projects,
+    # Imputing values into columns in projects as detailed in the key, value pairs.
+    dp.impute(projects,
                 col_meth = {'primary_focus_area': 'missing',
                             'grade_level': 'missing',
                            'resource_type': 'missing',
                            'school_metro': 'missing'})
-    print('Missing values in projects data imputed. See preprocess.py for details.')
+    print('Missing values in projects data imputed. See preprocess.py for details.\n')
 
-    util.fix_bool(outcomes, ['is_exciting',
-                         'fully_funded',
-                         'at_least_1_teacher_referred_donor',
-                         'at_least_1_green_donation', 'great_chat',
-                         'three_or_more_non_teacher_referred_donors',
-                         'one_non_teacher_referred_donor_giving_100_plus',
-                         'donation_from_thoughtful_donor'])
-    print('Booleans in Outcomes set to 1 and 0.')
 
-    util.fix_bool(projects, ['eligible_double_your_impact_match',
+    # Converting boolean columns from "t/f" to 1/0
+    dp.fix_bool(outcomes, ['fully_funded'])
+    print('Booleans in Outcomes set to 1 and 0.\n')
+
+
+    # Converting boolean columns from "t/f" to 1/0
+    dp.fix_bool(projects, ['eligible_double_your_impact_match',
                              'eligible_almost_home_match',
                              'school_charter',
                              'school_charter_ready_promise',
@@ -47,25 +36,42 @@ if __name__ == '__main__':
                              'school_year_round',
                              'teacher_ny_teaching_fellow',
                              'teacher_teach_for_america'])
-    print('Booleans in Projects set to 1 and 0.')
-
-    util.discretize_many(outcomes, {'non_teacher_referred_count': 5,
-                                    'teacher_referred_count': 5})
-    print('Columns in outcomes successfully discretized.')
-
-    util.discretize_many(projects, {'students_reached': [5, True],
-                                    'total_price_excluding_optional_support': [5, True],
-                                    'total_price_including_optional_support': [4, True]})
-    print('Columns in projects successfully discretized.')
+    print('Booleans in Projects set to 1 and 0 from t/f.\n')
 
 
-    projects = util.dummies(projects, ['grade_level',
+    # Discretize columns in projects data.
+    dp.discretize_many(projects, {'students_reached': 5,
+                                    'total_price_excluding_optional_support': 5,
+                                    'total_price_including_optional_support': 6})
+    print('Columns in projects successfully discretized.\n')
+
+
+    # Creating dummies for columns in projects data.
+    projects = dp.dummies(projects, ['grade_level',
                             'poverty_level',
                             'primary_focus_area',
                             'resource_type',
                             'school_metro'])
-    print('Dummies created!')
+    print('Dummies created!\n')
 
-    projects = util.dullify(projects,
+
+    # Creating date and time features.
+    projects = dp.get_date_parts(projects, {'date_posted':['month','day_of_week','is_weekend']})
+
+
+    # Reducing cardinality in projects school_county and putting rest in "other".
+    projects = dp.dullify(projects,
                  col_val = {'school_county':['Los Angeles','Cook']})
-    print('High cardinality columns fixed!')
+    print('High cardinality columns fixed!\n')
+
+
+    #Change the "positive" value from fully funded to not fully funded
+    outcomes['not_fully_funded'] = outcomes['fully_funded'].apply(lambda x: 1 if x == 0 else 0)
+
+
+    # Dumping cleaned data into database table
+    db.create_table_from_df(outcomes,'outcomes_cleaned', override_edits = True)
+    # db.create_table_from_df(projects,'projects_cleaned', sep =',')
+    # Had to manually load data to database due to error
+    # extra data after last expected column
+    # CONTEXT:  COPY projects_cleaned, line 66351: "a3da9e50d570bbb1bb597bec77cca48d,8b210d09d18d434e440305b64bb3537e,e20cefa5a7929da97b849f4ab03bebad,,..."
