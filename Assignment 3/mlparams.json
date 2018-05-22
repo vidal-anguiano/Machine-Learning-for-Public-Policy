@@ -1,4 +1,4 @@
-{"knn": {"n_neighbors": [1, 5, 10, 25, 50, 100],
+{"knn": {"n_neighbors": [25, 50, 100],
                   "weights": ["uniform", "distance"],
                   "algorithm": ["auto", "ball_tree", "kd_tree"]},
 
