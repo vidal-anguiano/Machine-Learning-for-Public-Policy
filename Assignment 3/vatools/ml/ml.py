@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 import json
@@ -37,7 +36,7 @@ all_methods = {'logit': LogisticRegression(),
 
 def mlpipeline(data, features, outcome, test_size = .5, methods = None,
                         param_file = '../mlparams.json', temporal = None,
-                        date_col = None, n_folds):
+                        date_col = None):
     '''
     Creates train test splits (temporal optional) and trains machine learning
     learning models using methods and parameters of choice.
@@ -78,9 +77,11 @@ def classify(X_train, y_train, X_test, y_test, param_file = '../mlparams.json'
                 print('Method: {} | Parameters: {} | Pred_Threshold: {:.1f}'.format(
                                                  method, param_set, pred_thresh*.1))
                 models.append([m_id, method, param_set, pred_thresh*.1,
-                               metrics['precision'], metrics['precision'][1],
-                               metrics['recall'], metrics['recall'][1],
-                               metrics['roc_auc'], metrics['accuracy']])
+                               metrics['precision'], metrics['precision_all'],
+                               metrics['recall'], metrics['recall_all'],
+                               metrics['roc_auc'], metrics['accuracy'],
+                               metrics['tp'], metrics['fp'], metrics['tn'],
+                               metrics['fn']])
 
     results = create_results_df(models, '../results/results_run_on_{}.csv'.format(
                                                             dp.current_time_str()))
@@ -136,9 +137,12 @@ def evaluate(y_test, pred_proba, pred_thresh):
 
     metrics = {}
     metrics['precision'] = precision
+    metrics['precision_all'] = round(precision_score(y_test, pred), 2)
     metrics['recall'] = recall
-    metrics['roc_auc'] = roc_auc_score(y_test, pred_proba)
-    metrics['accuracy'] = accuracy_score(y_test, pred)
+    metrics['recall_all'] = round(recall_score(y_test, pred), 2)
+    metrics['roc_auc'] = round(roc_auc_score(y_test, pred_proba), 2)
+    metrics['accuracy'] = round(accuracy_score(y_test, pred), 2)
+    metrics['tn'], metrics['fp'], metrics['fn'], metrics['tp'] = confusion_matrix(y_test, pred).ravel()
 
     return metrics
 
@@ -150,7 +154,7 @@ def precision_recall_at_intervention_levels(df):
     precision, recall = {}, {}
     for pr_at in [.01, .02, .05, .1, .2, .3, .5, 1]:
         cutoff = ceil(len(df)*pr_at)
-        sdf = df.iloc[:cutoff]
+        sdf = df.copy().iloc[:cutoff]
         y_test, pred = sdf['y_test'], sdf['pred']
         TP = len(sdf[(sdf['pred'] == 1) & (sdf['y_test'] == 1)])
         P = len(df[df['y_test'] == 1])
@@ -215,6 +219,7 @@ def create_results_df(models, filename):
     ''' Helper function for exporting results dataframe. '''
     df = pd.DataFrame(models, columns=['m_id','method','parameters','pred_threshold',
                                        'all_precicion','precision','all_recall',
-                                       'recall','roc_auc','accuracy'])
+                                       'recall','roc_auc','accuracy', 'tp','fp',
+                                       'tn','fn'])
     df.to_csv(filename)
     return df
