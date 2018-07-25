@@ -75,3 +75,9 @@ if __name__ == '__main__':
     # Had to manually load data to database due to error
     # extra data after last expected column
     # CONTEXT:  COPY projects_cleaned, line 66351: "a3da9e50d570bbb1bb597bec77cca48d,8b210d09d18d434e440305b64bb3537e,e20cefa5a7929da97b849f4ab03bebad,,..."
+    db.query('''CREATE TABLE combined_data as
+                SELECT a.*,
+                       b.not_fully_funded
+                FROM projects_cleaned a
+                JOIN outcomes_cleaned b
+                ON a.projectid = b.projectid;''', False)
