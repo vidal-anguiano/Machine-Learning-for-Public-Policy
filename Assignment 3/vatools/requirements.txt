@@ -4,7 +4,7 @@ ccsm==0.9.13.1
 census==0.8.7
 chardet==3.0.4
 compizconfig-python==0.9.13.1
-cryptography==1.9
+cryptography==3.2
 enum34==1.1.6
 future==0.16.0
 idna==2.5
